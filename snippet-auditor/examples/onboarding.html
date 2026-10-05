@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Onboarding Prototype</title>
+  <style>
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    body { margin: 0; font-family: -apple-system, "Segoe UI", Inter, Roboto, sans-serif; color: #0f172a; background: #fff; }
+    button, input, select { font: inherit; color: inherit; }
+    .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+
+    .stepper { display: flex; align-items: center; gap: 14px; padding: 14px 24px; border-bottom: 1px solid #e2e8f0; }
+    .step { display: flex; align-items: center; gap: 8px; padding: 0; border: 0; background: none; color: #64748b; cursor: pointer; font: 500 14px ui-monospace, Menlo, monospace; }
+    .step:disabled { cursor: default; }
+    .step .n { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; background: #e8eefb; color: #334155; font-size: 12px; }
+    .step.is-active { color: #0b5cd5; }
+    .step.is-active .n { background: #0b5cd5; color: #fff; }
+    .step.is-done .n { background: #dbeafe; color: #0b5cd5; }
+    .sep { color: #cbd5e1; }
+    .secure { margin-left: auto; font-size: 13px; color: #64748b; white-space: nowrap; }
+
+    main { max-width: 720px; margin: 0 auto; padding: 44px 24px 56px; }
+    h1 { margin: 0 0 8px; font-size: 30px; letter-spacing: -0.02em; line-height: 1.2; }
+    .lead { margin: 0 0 24px; color: #475569; font-size: 16px; line-height: 1.5; }
+
+    .member { display: flex; align-items: center; gap: 14px; padding: 16px 18px; margin-bottom: 10px; border: 1px solid #d5dce6; cursor: pointer; }
+    .member:has(input:checked) { border-color: #9fb8e6; }
+    .member input { width: 20px; height: 20px; margin: 0; accent-color: #0b5cd5; }
+    .who { flex: 1; min-width: 0; }
+    .who strong { display: block; font-size: 16px; font-weight: 600; }
+    .who small { color: #475569; font: 13px ui-monospace, Menlo, monospace; }
+    .tag { padding: 3px 8px; background: #e8eefb; font: 13px ui-monospace, Menlo, monospace; white-space: nowrap; }
+    .dashed { width: 100%; padding: 14px; border: 1px dashed #b6c2d3; background: #fff; cursor: pointer; font: 500 14px ui-monospace, Menlo, monospace; }
+    .dashed:hover { border-color: #0b5cd5; color: #0b5cd5; }
+
+    .settings { margin-top: 24px; border-top: 1px solid #e2e8f0; }
+    .row { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 18px 0; }
+    .row h3 { margin: 0 0 4px; font-size: 16px; font-weight: 500; }
+    .row p { margin: 0; color: #475569; font: 13px ui-monospace, Menlo, monospace; }
+    select { min-width: 220px; padding: 10px 12px; border: 1px solid #c8d0dc; background: #fff; font-size: 15px; }
+    .switch { appearance: none; width: 46px; height: 26px; margin: 0; border-radius: 13px; background: #cbd5e1; position: relative; cursor: pointer; flex: none; transition: background .15s; }
+    .switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: transform .15s; }
+    .switch:checked { background: #0b5cd5; }
+    .switch:checked::after { transform: translateX(20px); }
+
+    .actions { display: flex; align-items: center; gap: 10px; margin-top: 8px; padding-top: 20px; border-top: 1px solid #e2e8f0; }
+    .actions .spacer { flex: 1; }
+    .hint { color: #64748b; font: 13px ui-monospace, Menlo, monospace; }
+    .ghost { padding: 10px 14px; border: 0; background: none; color: #64748b; cursor: pointer; font: 500 14px ui-monospace, Menlo, monospace; }
+    .ghost:hover { color: #0f172a; }
+    .secondary { padding: 10px 16px; border: 1px solid #c8d0dc; background: #fff; cursor: pointer; font: 500 14px ui-monospace, Menlo, monospace; }
+    .primary { padding: 11px 20px; border: 0; background: #000; color: #fff; cursor: pointer; font: 500 14px ui-monospace, Menlo, monospace; }
+    .primary:disabled, .secondary:disabled { opacity: .4; cursor: not-allowed; }
+
+    .store { display: flex; align-items: center; gap: 14px; padding: 16px 18px; margin-bottom: 10px; border: 1px solid #d5dce6; }
+    .logo { width: 40px; height: 40px; display: grid; place-items: center; background: #0f172a; color: #fff; font-weight: 700; flex: none; }
+    .connect { min-width: 124px; padding: 9px 14px; border: 1px solid #0f172a; background: #fff; cursor: pointer; font: 500 13px ui-monospace, Menlo, monospace; }
+    .connect[data-state="connecting"] { border-color: #c8d0dc; color: #64748b; cursor: progress; }
+    .connect[data-state="connected"] { border-color: #15924a; background: #eefaf2; color: #15924a; }
+
+    .chips { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 28px; }
+    .chip { padding: 10px 14px; border: 1px solid #c8d0dc; background: #fff; cursor: pointer; font: 500 14px ui-monospace, Menlo, monospace; }
+    .chip[aria-pressed="true"] { border-color: #0b5cd5; background: #eaf1fd; color: #0b5cd5; }
+    .group-label { margin: 0 0 10px; font-size: 16px; font-weight: 500; }
+    .budget { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid #c8d0dc; margin-bottom: 28px; }
+    .budget label { padding: 12px; text-align: center; cursor: pointer; border-left: 1px solid #c8d0dc; font: 500 14px ui-monospace, Menlo, monospace; }
+    .budget label:first-child { border-left: 0; }
+    .budget input { position: absolute; opacity: 0; pointer-events: none; }
+    .budget label:has(input:checked) { background: #0f172a; color: #fff; }
+    .budget label:has(input:focus-visible) { outline: 2px solid #0b5cd5; outline-offset: -2px; }
+
+    .done { text-align: center; padding-top: 40px; }
+    .done .check { width: 56px; height: 56px; margin: 0 auto 20px; display: grid; place-items: center; border-radius: 50%; background: #eefaf2; color: #15924a; font-size: 28px; }
+
+    .modal { position: fixed; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(15, 23, 42, .45); }
+    .dialog { width: 100%; max-width: 420px; padding: 24px; background: #fff; box-shadow: 0 20px 50px rgba(15, 23, 42, .25); }
+    .dialog h2 { margin: 0 0 16px; font-size: 20px; }
+    .field { display: block; margin-bottom: 14px; }
+    .field span { display: block; margin-bottom: 6px; color: #475569; font: 13px ui-monospace, Menlo, monospace; }
+    .field input, .field select { width: 100%; padding: 10px 12px; border: 1px solid #c8d0dc; font-size: 15px; }
+    .dialog .actions { border: 0; padding-top: 6px; justify-content: flex-end; }
+
+    .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); padding: 10px 16px; background: #0f172a; color: #fff; font: 13px ui-monospace, Menlo, monospace; }
+
+    @media (max-width: 640px) {
+      .stepper { padding: 12px 16px; gap: 10px; }
+      .step .label, .secure { display: none; }
+      main { padding: 28px 16px 40px; }
+      h1 { font-size: 24px; }
+      .row { flex-direction: column; align-items: stretch; }
+      select { min-width: 0; width: 100%; }
+      .switch { align-self: flex-start; }
+      .actions { flex-wrap: wrap; }
+      .actions .spacer { display: none; }
+      .actions .primary { width: 100%; }
+      .tag { display: none; }
+    }
+  </style>
+</head>
+
+<body>
+  <nav class="stepper" aria-label="Onboarding steps">
+    <button class="step is-active" data-go="1"><span class="n">1</span><span class="label">Household</span></button>
+    <span class="sep">/</span>
+    <button class="step" data-go="2" disabled><span class="n">2</span><span class="label">Connections</span></button>
+    <span class="sep">/</span>
+    <button class="step" data-go="3" disabled><span class="n">3</span><span class="label">Preferences</span></button>
+    <span class="secure mono">256-bit Encrypted</span>
+  </nav>
+
+  <main>
+    <!-- Step 1: Household -->
+    <section data-step="1">
+      <h1>Who belongs to this household?</h1>
+      <p class="lead">Select all members to include in your financial sync and coverage plan.</p>
+
+      <div id="members">
+        <label class="member">
+          <input type="checkbox" checked>
+          <span class="who"><strong>Alex Chen (You)</strong><small>alex.chen@example.com</small></span>
+          <span class="tag">Self</span>
+        </label>
+        <label class="member">
+          <input type="checkbox" checked>
+          <span class="who"><strong>Morgan Chen</strong><small>Spouse · Joint Policyholder</small></span>
+          <span class="tag">Spouse</span>
+        </label>
+        <label class="member">
+          <input type="checkbox" checked>
+          <span class="who"><strong>Leo Chen</strong><small>Dependent (Child) · Age 7</small></span>
+          <span class="tag">Dependent</span>
+        </label>
+      </div>
+      <button class="dashed" data-action="add-member">+ Add household member</button>
+
+      <div class="settings">
+        <div class="row">
+          <div>
+            <h3>Household Tax Filing Status</h3>
+            <p>Affects aggregated deduction ceilings</p>
+          </div>
+          <select aria-label="Household tax filing status">
+            <option>Married Filing Jointly</option>
+            <option>Married Filing Separately</option>
+            <option>Head of Household</option>
+            <option>Single</option>
+          </select>
+        </div>
+        <div class="row">
+          <div>
+            <h3>Shared Accounts Sync</h3>
+            <p>Allow automatic asset categorization across all adults</p>
+          </div>
+          <input class="switch" type="checkbox" role="switch" aria-label="Shared accounts sync" checked>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="ghost" data-action="draft">Save Draft</button>
+        <span class="spacer"></span>
+        <span class="hint" id="memberCount">3 selected</span>
+        <button class="secondary" disabled>Back</button>
+        <button class="primary" id="toConnections" data-go="2">Continue to Connections →</button>
+      </div>
+    </section>
+
+    <!-- Step 2: Connections -->
+    <section data-step="2" hidden>
+      <h1>Connect your grocery stores</h1>
+      <p class="lead">Link the stores your household shops at so purchases sync automatically.</p>
+
+      <div class="store">
+        <span class="logo">G</span>
+        <span class="who"><strong>Greenleaf Market</strong><small>Loyalty account · 2 cards</small></span>
+        <button class="connect" data-action="connect" data-store="Greenleaf Market">Connect</button>
+      </div>
+      <div class="store">
+        <span class="logo">H</span>
+        <span class="who"><strong>Harbor Grocers</strong><small>Online orders and receipts</small></span>
+        <button class="connect" data-action="connect" data-store="Harbor Grocers">Connect</button>
+      </div>
+      <div class="store">
+        <span class="logo">N</span>
+        <span class="who"><strong>Northside Pantry</strong><small>In-store receipts only</small></span>
+        <button class="connect" data-action="connect" data-store="Northside Pantry">Connect</button>
+      </div>
+
+      <div class="actions">
+        <span class="hint" id="connCount">0 connected</span>
+        <span class="spacer"></span>
+        <button class="secondary" data-go="1">Back</button>
+        <button class="primary" id="toPrefs" data-go="3" disabled>Continue to Preferences →</button>
+      </div>
+    </section>
+
+    <!-- Step 3: Preferences -->
+    <section data-step="3" hidden>
+      <h1>Set your food preferences</h1>
+      <p class="lead">We use these to tailor recommendations for everyone in the household.</p>
+
+      <p class="group-label">Dietary preferences</p>
+      <div class="chips">
+        <button class="chip" aria-pressed="true">Vegetarian</button>
+        <button class="chip" aria-pressed="false">Gluten-free</button>
+        <button class="chip" aria-pressed="false">Dairy-free</button>
+        <button class="chip" aria-pressed="true">Organic first</button>
+        <button class="chip" aria-pressed="false">Low sodium</button>
+      </div>
+
+      <p class="group-label">Weekly grocery budget</p>
+      <div class="budget" role="radiogroup" aria-label="Weekly grocery budget">
+        <label><input type="radio" name="budget" value="Under $150">Under $150</label>
+        <label><input type="radio" name="budget" value="$150–$300" checked>$150–$300</label>
+        <label><input type="radio" name="budget" value="$300+">$300+</label>
+      </div>
+
+      <div class="actions">
+        <span class="spacer"></span>
+        <button class="secondary" data-go="2">Back</button>
+        <button class="primary" data-go="done">Finish setup</button>
+      </div>
+    </section>
+
+    <!-- Done -->
+    <section data-step="done" class="done" hidden>
+      <div class="check">✓</div>
+      <h1>You're all set</h1>
+      <p class="lead" id="summary"></p>
+      <button class="secondary" data-action="restart">Start over</button>
+    </section>
+  </main>
+
+  <div class="modal" id="memberModal" hidden>
+    <form class="dialog" id="memberForm" role="dialog" aria-modal="true" aria-labelledby="memberTitle">
+      <h2 id="memberTitle">Add household member</h2>
+      <label class="field"><span>Full name</span><input id="memberName" autocomplete="off" required></label>
+      <label class="field"><span>Relationship</span>
+        <select id="memberRole">
+          <option>Spouse</option>
+          <option>Dependent</option>
+          <option>Other adult</option>
+        </select>
+      </label>
+      <div class="actions">
+        <button type="button" class="ghost" data-action="close-modal">Cancel</button>
+        <button type="submit" class="primary">Add member</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="toast" id="toast" role="status" hidden></div>
+
+  <script>
+    (function () {
+      var reached = 1;
+      var sections = document.querySelectorAll('section[data-step]');
+      var stepButtons = document.querySelectorAll('.step');
+      var toastEl = document.getElementById('toast');
+      var modal = document.getElementById('memberModal');
+      var form = document.getElementById('memberForm');
+      var toastTimer;
+
+      function toast(message) {
+        toastEl.textContent = message;
+        toastEl.hidden = false;
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(function () { toastEl.hidden = true; }, 2200);
+      }
+
+      function go(step) {
+        var index = step === 'done' ? 4 : step;
+        reached = Math.max(reached, index);
+        sections.forEach(function (s) { s.hidden = s.dataset.step !== String(step); });
+        stepButtons.forEach(function (b) {
+          var k = Number(b.dataset.go);
+          b.classList.toggle('is-active', k === index);
+          b.classList.toggle('is-done', k < index);
+          b.disabled = k > reached;
+        });
+        if (step === 'done') {
+          var members = document.querySelectorAll('#members input:checked').length;
+          var stores = document.querySelectorAll('[data-state="connected"]').length;
+          var prefs = document.querySelectorAll('.chip[aria-pressed="true"]').length;
+          document.getElementById('summary').textContent =
+            members + ' members, ' + stores + ' connected stores and ' + prefs + ' preferences saved.';
+        }
+        window.scrollTo(0, 0);
+      }
+
+      function updateMembers() {
+        var n = document.querySelectorAll('#members input:checked').length;
+        document.getElementById('memberCount').textContent = n + ' selected';
+        document.getElementById('toConnections').disabled = n === 0;
+      }
+
+      function updateConnections() {
+        var n = document.querySelectorAll('[data-state="connected"]').length;
+        document.getElementById('connCount').textContent = n + ' connected';
+        document.getElementById('toPrefs').disabled = n === 0;
+      }
+
+      function connect(btn) {
+        var state = btn.dataset.state;
+        if (state === 'connecting') return;
+        if (state === 'connected') {
+          btn.dataset.state = '';
+          btn.textContent = 'Connect';
+          updateConnections();
+          return;
+        }
+        btn.dataset.state = 'connecting';
+        btn.textContent = 'Connecting…';
+        setTimeout(function () {
+          btn.dataset.state = 'connected';
+          btn.textContent = 'Connected ✓';
+          updateConnections();
+          toast(btn.dataset.store + ' connected');
+        }, 900);
+      }
+
+      function openModal() {
+        form.reset();
+        modal.hidden = false;
+        document.getElementById('memberName').focus();
+      }
+      function closeModal() { modal.hidden = true; }
+
+      document.addEventListener('click', function (e) {
+        var target = e.target.closest('[data-go]');
+        if (target) {
+          if (!target.disabled) go(target.dataset.go === 'done' ? 'done' : Number(target.dataset.go));
+          return;
+        }
+        var chip = e.target.closest('.chip');
+        if (chip) {
+          chip.setAttribute('aria-pressed', chip.getAttribute('aria-pressed') === 'true' ? 'false' : 'true');
+          return;
+        }
+        var el = e.target.closest('[data-action]');
+        if (!el) return;
+        var action = el.dataset.action;
+        if (action === 'draft') toast('Draft saved');
+        if (action === 'add-member') openModal();
+        if (action === 'close-modal') closeModal();
+        if (action === 'connect') connect(el);
+        if (action === 'restart') { reached = 1; go(1); }
+      });
+
+      modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
+      document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !modal.hidden) closeModal(); });
+      document.getElementById('members').addEventListener('change', updateMembers);
+
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var name = document.getElementById('memberName').value.trim();
+        var role = document.getElementById('memberRole').value;
+        if (!name) return;
+        var row = document.createElement('label');
+        row.className = 'member';
+        row.innerHTML = '<input type="checkbox" checked><span class="who"><strong></strong><small></small></span><span class="tag"></span>';
+        row.querySelector('strong').textContent = name;
+        row.querySelector('small').textContent = role === 'Spouse' ? 'Spouse · Joint Policyholder' : role;
+        row.querySelector('.tag').textContent = role;
+        document.getElementById('members').appendChild(row);
+        closeModal();
+        updateMembers();
+        toast(name + ' added to household');
+      });
+    })();
+  </script>
+</body>
+</html>

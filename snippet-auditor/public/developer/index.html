@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex, nofollow">
+<title>Snippet Auditor</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23000'/%3E%3Cpath d='M8 11l5 5-5 5M15 22h9' stroke='%23fff' stroke-width='2.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/app.css">
+</head>
+<body>
+
+<div class="boot" id="boot" data-state="loading">
+  <div class="boot-card" role="status" aria-live="polite">
+    <div class="logo" aria-hidden="true">&gt;_</div>
+    <p class="boot-title" id="bootTitle">Loading project…</p>
+    <p class="boot-text" id="bootText" hidden></p>
+    <button class="btn-sm" id="bootRetry" type="button" hidden>Try again</button>
+  </div>
+</div>
+
+<div class="app" id="app" hidden>
+  <header class="topbar">
+    <div class="identity">
+      <div class="logo" aria-hidden="true">&gt;_</div>
+      <span class="product">Snippet Auditor</span>
+      <span class="vdiv" aria-hidden="true"></span>
+      <div class="title-wrap">
+        <input id="titleInput" class="title-input" type="text" spellcheck="false" autocomplete="off" maxlength="120" aria-label="Project title" placeholder="Project title">
+        <span class="title-measure" id="titleMeasure" aria-hidden="true"></span>
+        <button class="icon-btn" id="titleEditBtn" type="button" title="Rename project" aria-label="Rename project">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M11.2 2.3a1.5 1.5 0 0 1 2.1 2.1L5.6 12.1 2.5 13l.9-3.1z"/><path d="M10 3.5l2.5 2.5"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="actions">
+      <span class="save-status" id="saveStatus" data-state="clean" role="status"><i></i><span id="saveStatusText">Saved</span></span>
+      <button class="btn btn-run" id="runBtn" type="button" title="Run the current HTML in the preview (does not save)">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M4.5 2.8v10.4a.6.6 0 0 0 .9.5l8.3-5.2a.6.6 0 0 0 0-1L5.4 2.3a.6.6 0 0 0-.9.5z"/></svg>
+        Run <kbd id="runKbd">⌘↵</kbd>
+      </button>
+      <button class="btn btn-save" id="saveBtn" type="button" disabled>
+        <svg id="saveIcon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M2.5 3.5a1 1 0 0 1 1-1h7.3l2.7 2.7v7.3a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1z"/><path d="M5 2.5v3h5v-3M5 13.5V9.5h6v4"/></svg>
+        <span id="saveLabel">Save</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <section class="panel left-panel" aria-label="Workspace">
+      <div class="mode-bar">
+        <div class="segmented" role="tablist" aria-label="Panel mode">
+          <button type="button" role="tab" id="tabCode" aria-controls="codeMode" aria-selected="true" data-mode="code">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 4L2 8l3.5 4M10.5 4L14 8l-3.5 4"/></svg>
+            Code<span class="tab-dot" id="codeDot" title="Unsaved changes" hidden></span>
+          </button>
+          <button type="button" role="tab" id="tabQa" aria-controls="qaMode" aria-selected="false" tabindex="-1" data-mode="qa">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="2" y="2.5" width="12" height="9" rx="1"/><path d="M5 14l2-2.5M5 6h6M5 8.5h3.5"/></svg>
+            QA <span class="count-chip" id="qaTabCount" style="margin-left:2px;padding:0 6px">0</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="mode code-mode" id="codeMode" role="tabpanel" aria-labelledby="tabCode">
+        <div class="panel-head">
+          <div class="ph-row">
+            <h2 class="ph-title">
+              <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 5l-5 5 5 5M13 5l5 5-5 5"/></svg>
+              HTML
+            </h2>
+            <span class="chip">index.html</span>
+          </div>
+          <p class="ph-sub">Edit the HTML and run it to update the preview.</p>
+        </div>
+        <div class="ed-tabbar">
+          <div class="ed-tab"><span class="ed-badge">HTML</span><span>index.html</span><span class="dirty-dot" id="dirtyDot" title="Unsaved HTML changes" hidden></span></div>
+          <div class="ed-tools">
+            <button type="button" id="revertBtn" title="Discard HTML changes and restore the last saved HTML" disabled>Revert</button>
+          </div>
+        </div>
+        <div class="editor" id="editor">
+          <div class="gutter" aria-hidden="true"><div class="gutter-inner" id="gutter"></div></div>
+          <div class="code">
+            <div class="active-line" id="activeLine" aria-hidden="true"></div>
+            <pre aria-hidden="true"><code id="highlight"></code></pre>
+            <textarea id="source" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" wrap="off" aria-label="HTML source"></textarea>
+          </div>
+        </div>
+        <div class="statusbar">
+          <span>HTML</span>
+          <span class="sb-right">
+            <span id="cursorPos">Ln 1, Col 1</span>
+            <span>Spaces: 2</span>
+            <span>UTF-8</span>
+          </span>
+        </div>
+      </div>
+
+      <div class="mode qa-mode" id="qaMode" role="tabpanel" aria-labelledby="tabQa" hidden>
+        <div class="panel-head">
+          <div class="qa-head-row">
+            <h2 class="ph-title"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><rect x="2.5" y="3" width="15" height="11.5" rx="1"/><path d="M6 17.5l2.5-3M6.5 10.5l1.2-3.2 4.8-.8-1 1.4M6.5 10.5l3.4-.6"/></svg>QA Notes</h2>
+            <button class="qa-refresh" id="qaRefresh" type="button" title="Load the latest QA notes"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13.2 8A5.2 5.2 0 1 1 11.6 4.3"/><path d="M13.3 2.4v2.9h-2.9"/></svg>Refresh</button>
+          </div>
+          <p class="ph-sub">Feedback from the review link. Read-only in the developer view.</p>
+        </div>
+        <div class="ptr-list" id="ptrList" aria-label="QA pointers"></div>
+      </div>
+    </section>
+
+    <section class="panel preview-panel" aria-label="Preview">
+      <div class="pv-head">
+        <h2>Preview</h2>
+        <span class="pill is-plain" id="ctxPill" role="status">
+          <i class="dot"></i><span class="pill-text" id="ctxText">Preview</span>
+          <button class="pill-clear" id="ctxClear" type="button" title="Clear the selected pointer" aria-label="Clear the selected pointer" hidden>
+            <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 3l6 6M9 3l-6 6"/></svg>
+          </button>
+        </span>
+        <span class="pv-status" id="pvStatus" data-state="ready" role="status"><i></i><span id="pvStatusText">Ready</span></span>
+        <div class="pv-tools">
+          <span class="vsep" aria-hidden="true"></span>
+          <div class="segmented" role="group" aria-label="Preview viewport">
+            <button type="button" data-viewport="desktop" aria-pressed="true" title="Desktop: fills the panel">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><rect x="1.5" y="2.5" width="13" height="8.5" rx="1"/><path d="M6 13.5h4M8 11v2.5"/></svg>Desktop
+            </button>
+            <button type="button" data-viewport="tablet" aria-pressed="false" title="Tablet: 768 px wide">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><rect x="3" y="1.5" width="10" height="13" rx="1.2"/><path d="M7 12.5h2"/></svg>Tablet
+            </button>
+            <button type="button" data-viewport="mobile" aria-pressed="false" title="Mobile: 390 px wide">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><rect x="4.5" y="1.5" width="7" height="13" rx="1.2"/><path d="M7.2 12.5h1.6"/></svg>Mobile
+            </button>
+          </div>
+          <button class="sq-btn" id="reloadBtn" type="button" title="Re-run the current preview" aria-label="Re-run the current preview">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13.2 8A5.2 5.2 0 1 1 11.6 4.3"/><path d="M13.3 2.4v2.9h-2.9"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="pv-canvas" id="pvCanvas">
+        <div class="browser" id="browser">
+          <div class="chrome">
+            <div class="dots" aria-hidden="true"><span></span><span></span><span></span></div>
+            <div class="url">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="3.5" y="7" width="9" height="6.5" rx="1"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></svg>
+              <span id="urlText">localhost:3000/prototype</span>
+            </div>
+            <div class="chrome-right">
+              <span class="sync-badge" id="syncBadge">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M5.5 8.2l1.7 1.7 3.3-3.6"/></svg>
+                <span id="syncText"><span class="sync-label">Preview updated</span></span>
+              </span>
+              <button class="eye-btn" id="focusBtn" type="button" aria-pressed="false" title="Fill the panel with the preview" aria-label="Fill the panel with the preview">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.8 10S4.8 4.5 10 4.5 18.2 10 18.2 10 15.2 15.5 10 15.5 1.8 10 1.8 10z"/><circle cx="10" cy="10" r="2.6"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="viewport" id="viewport">
+            <div class="frame-host" id="frameHost"></div>
+            <div class="pv-empty" id="pvEmpty" hidden><strong id="pvEmptyTitle"></strong><p id="pvEmptyText"></p></div>
+            <div class="pv-notice" id="pvNotice" role="status" hidden></div>
+            <div class="pv-overlay" id="pvOverlay" hidden>
+              <div class="ov-card" role="alert" aria-labelledby="ovTitle">
+                <div class="ov-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M8 4.5v4.2"/><circle cx="8" cy="11.4" r=".4" fill="currentColor"/></svg></div>
+                <h3 id="ovTitle">Preview could not be rendered</h3>
+                <p id="ovText"></p>
+                <div class="ov-actions">
+                  <button class="btn-sm" id="ovDetailsBtn" type="button" aria-expanded="false">View error</button>
+                  <button class="btn-ghost" id="ovDismissBtn" type="button">Show preview anyway</button>
+                </div>
+                <ul class="issue-list" id="ovList" hidden></ul>
+              </div>
+            </div>
+            <div class="pv-tray" id="pvTray" hidden>
+              <div class="tray-head">
+                <span class="tray-sum"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.4"/><circle cx="8" cy="10.9" r=".3" fill="currentColor"/></svg><span id="traySum"></span></span>
+                <span class="grow"></span>
+                <button class="btn-ghost" id="trayToggle" type="button" aria-expanded="false">Details</button>
+                <button class="icon-btn" id="trayClose" type="button" aria-label="Dismiss" title="Dismiss">
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+                </button>
+              </div>
+              <ul class="issue-list" id="trayList" hidden></ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="unsupported" role="main">
+  <div class="us-card">
+    <div class="us-icon" aria-hidden="true">
+      <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="26" height="17" rx="2"/><path d="M12 27h8M16 22v5"/><path d="M13 11l-2.5 2.5L13 16M19 11l2.5 2.5L19 16"/></svg>
+    </div>
+    <h1>Snippet Auditor</h1>
+    <p>This workspace is designed for desktop web browsers.</p>
+    <p>Please open Snippet Auditor on a desktop browser to continue.</p>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"><span id="toastText"></span><button type="button" id="toastAction" hidden></button></div>
+
+<script type="module" src="/assets/developer.js"></script>
+</body>
+</html>
