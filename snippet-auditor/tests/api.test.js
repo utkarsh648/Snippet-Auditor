@@ -14,7 +14,7 @@ process.env.DATA_FILE = join(dir, 'db.json');
 process.env.NODE_ENV = 'test';
 delete process.env.SUPABASE_URL;
 
-const { createServer } = await import('../server.js');
+const { createServer } = await import('../dev-server.js');
 const { getStore } = await import('../lib/store/index.js');
 const { generateToken, hashToken } = await import('../lib/tokens.js');
 

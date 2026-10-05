@@ -8,7 +8,7 @@
     "node": ">=18.17"
   },
   "scripts": {
-    "dev": "node server.js",
+    "dev": "node dev-server.js",
     "create-project": "node scripts/create-project.js",
     "test": "node --test tests/api.test.js"
   },
