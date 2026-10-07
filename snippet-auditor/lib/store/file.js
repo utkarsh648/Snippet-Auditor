@@ -41,7 +41,17 @@ export function createFileStore({ path }) {
   }
 
   const pub = (p) => p && ({ id: p.id, name: p.name, html: p.html, createdAt: p.createdAt, updatedAt: p.updatedAt });
-  const ptr = (p) => p && ({ id: p.id, pointerNumber: p.pointerNumber, screenName: p.screenName, notes: p.notes, createdAt: p.createdAt, updatedAt: p.updatedAt });
+  const ANNOTATION_DEFAULTS = {
+    screenState: 'Default', targetType: 'screen', targetSelector: null, targetLabel: null,
+    anchorX: null, anchorY: null, viewportWidth: null, viewportHeight: null
+  };
+  const FIELDS = ['screenName', 'notes', ...Object.keys(ANNOTATION_DEFAULTS)];
+  // Older rows (before visual annotations) read back as screen-level notes.
+  const ptr = (p) => p && ({
+    id: p.id, pointerNumber: p.pointerNumber, screenName: p.screenName, notes: p.notes,
+    ...Object.fromEntries(Object.keys(ANNOTATION_DEFAULTS).map((k) => [k, p[k] ?? ANNOTATION_DEFAULTS[k]])),
+    createdAt: p.createdAt, updatedAt: p.updatedAt
+  });
 
   return {
     getProjectWithHashes: (id) => tx((db) => {
@@ -81,11 +91,12 @@ export function createFileStore({ path }) {
       return { pointers, nextPointerNumber: p ? p.nextPointerNumber : 1 };
     }, false),
 
-    createPointer: (projectId, { screenName, notes }) => tx((db) => {
+    createPointer: (projectId, fields) => tx((db) => {
       const p = db.projects[projectId];
       if (!p) throw new Error('Project not found.');
       const t = now();
-      const row = { id: randomUUID(), projectId, pointerNumber: p.nextPointerNumber++, screenName, notes, createdAt: t, updatedAt: t };
+      const row = { id: randomUUID(), projectId, pointerNumber: p.nextPointerNumber++, ...ANNOTATION_DEFAULTS, createdAt: t, updatedAt: t };
+      for (const k of FIELDS) if (fields[k] !== undefined) row[k] = fields[k];
       db.pointers.push(row);
       return ptr(row);
     }),
@@ -93,8 +104,7 @@ export function createFileStore({ path }) {
     updatePointer: (projectId, pointerId, patch) => tx((db) => {
       const row = db.pointers.find((x) => x.id === pointerId && x.projectId === projectId);
       if (!row) return null;
-      if (patch.screenName !== undefined) row.screenName = patch.screenName;
-      if (patch.notes !== undefined) row.notes = patch.notes;
+      for (const k of FIELDS) if (patch[k] !== undefined) row[k] = patch[k];
       row.updatedAt = now();
       return ptr(row);
     }),

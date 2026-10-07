@@ -175,3 +175,79 @@ test('routes: viewpoints are served; static files cannot escape /public', async 
   const esc = await fetch(`${base}/%2e%2e/package.json`);
   assert.notEqual(esc.status, 200);
 });
+
+/* ---------------- Visual annotations ---------------- */
+
+const ANNOTATED = {
+  screenName: 'Household', screenState: 'Default', notes: "The selected state isn't visually clear.",
+  targetType: 'element', targetSelector: "[data-qa-id='household-members']", targetLabel: 'Household member selector',
+  anchorX: 0.64, anchorY: 0.42, viewportWidth: 1440, viewportHeight: 900
+};
+
+test('annotations: full payload round-trips; developer can read it', async () => {
+  const r = await call('POST', '/api/pointers', { token: A.qa, projectId: A.id, body: ANNOTATED });
+  assert.equal(r.status, 201);
+  const p = r.json.data.pointer;
+  for (const k of Object.keys(ANNOTATED)) assert.deepEqual(p[k], ANNOTATED[k], k);
+  const list = await call('GET', '/api/pointers', { token: A.dev, projectId: A.id });
+  const got = list.json.data.pointers.find((x) => x.id === p.id);
+  assert.equal(got.targetSelector, ANNOTATED.targetSelector);
+  assert.equal(got.anchorY, 0.42);
+});
+
+test('annotations: legacy payload (screen name + notes only) becomes a screen-level note', async () => {
+  const p = (await call('POST', '/api/pointers', { token: A.qa, projectId: A.id, body: { screenName: 'Old client', notes: 'x' } })).json.data.pointer;
+  assert.equal(p.targetType, 'screen');
+  assert.equal(p.screenState, 'Default');
+  assert.equal(p.targetSelector, null);
+  assert.equal(p.anchorX, null);
+});
+
+test('annotations: anchors are clamped to 0–1; viewport sizes are rounded', async () => {
+  const p = (await call('POST', '/api/pointers', { token: A.qa, projectId: A.id, body: { ...ANNOTATED, anchorX: 1.4, anchorY: -0.2, viewportWidth: 390.6 } })).json.data.pointer;
+  assert.equal(p.anchorX, 1);
+  assert.equal(p.anchorY, 0);
+  assert.equal(p.viewportWidth, 391);
+});
+
+test('annotations: invalid values are rejected', async () => {
+  const bad = [
+    { targetType: 'circle' },
+    { anchorX: 'half', anchorY: 0.5 },
+    { anchorY: undefined },                          // x without y
+    { viewportWidth: -10 },
+    { viewportHeight: 0 },
+    { targetType: 'element', targetSelector: null }, // element without selector
+    { targetSelector: 'x'.repeat(501) },
+    { targetLabel: 'x'.repeat(151) },
+    { screenState: 'x'.repeat(101) }
+  ];
+  for (const patch of bad) {
+    const r = await call('POST', '/api/pointers', { token: A.qa, projectId: A.id, body: { ...ANNOTATED, ...patch } });
+    assert.equal(r.status, 400, JSON.stringify(patch));
+  }
+  // Infinity is not representable in JSON, but 1e400 parses to Infinity.
+  const url = new URL(`${base}/api/pointers`); url.searchParams.set('projectId', A.id);
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${A.qa}` },
+    body: '{"screenName":"x","targetType":"area","anchorX":1e400,"anchorY":0.5}'
+  });
+  assert.equal(res.status, 400);
+});
+
+test('annotations: change target keeps the note text and number', async () => {
+  const p = (await call('POST', '/api/pointers', { token: A.qa, projectId: A.id, body: ANNOTATED })).json.data.pointer;
+  const r = await call('PATCH', `/api/pointers/${p.id}`, { token: A.qa, projectId: A.id, body: {
+    targetType: 'area', targetSelector: null, targetLabel: 'Selected area', anchorX: 0.2, anchorY: 0.8, viewportWidth: 390, viewportHeight: 844
+  } });
+  assert.equal(r.status, 200);
+  const u = r.json.data.pointer;
+  assert.equal(u.pointerNumber, p.pointerNumber);
+  assert.equal(u.notes, ANNOTATED.notes);
+  assert.equal(u.targetType, 'area');
+  assert.equal(u.targetSelector, null);
+  assert.equal(u.viewportWidth, 390);
+  // Developer still cannot change annotations.
+  assert.equal((await call('PATCH', `/api/pointers/${p.id}`, { token: A.dev, projectId: A.id, body: { targetLabel: 'x' } })).status, 403);
+});

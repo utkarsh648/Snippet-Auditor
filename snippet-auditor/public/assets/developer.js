@@ -5,6 +5,7 @@ import { createApi } from './api.js';
 import { HtmlEditor } from './editor.js';
 import { PreviewPanel } from './preview.js';
 import { QAPanel } from './qa-panel.js';
+import { AnnotationLayer } from './annotations.js';
 
 const MAX_HTML_BYTES = 2 * 1024 * 1024;
 const desktopMq = window.matchMedia('(min-width: 1024px)');
@@ -24,7 +25,8 @@ const state = {
   selectedPointerId: null
 };
 
-let api, editor, preview, qa, ui;
+let api, editor, preview, qa, layer, ui;
+let currentScreen = null;
 
 initToast();
 start();
@@ -91,17 +93,44 @@ function initUi() {
     onShortcut: (k) => (k === 'run' ? run() : save()),
     onContextClear: () => qa.clearSelection(),
     onViewport: (v) => savePrefs({ viewport: v }),
-    onState: () => sync()
+    onState: () => sync(),
+    onQa: (type, data) => layer.handleQa(type, data),
+    onLoaded: () => layer.handleLoaded()
+  });
+
+  // QA markers are review-only here and only shown while the QA tab is open,
+  // so Code mode keeps a clean preview.
+  layer = new AnnotationLayer({
+    preview,
+    host: $('viewport'),
+    onMarkerClick: (key) => { qa.select(key); qa.scrollToCard(key); layer.focus(key); },
+    onPositions: ({ screen, statuses }) => {
+      currentScreen = screen;
+      qa.setTargetStatuses(statuses, screen);
+      syncContext();
+    },
+    onFocused: (key, status) => {
+      const item = qa.items.find((i) => i.key === key);
+      if (!item) return;
+      if (status === 'elsewhere' || status === 'hidden') {
+        preview.notice(`Note ${String(item.number).padStart(2, '0')} is on “${item.f.screenName || 'another screen'}”. Go to that screen in the preview to see its marker.`);
+      } else if (status === 'missing') {
+        preview.notice(`Note ${String(item.number).padStart(2, '0')}: the original target wasn't found. The marker shows where it was placed.`);
+      }
+    }
   });
 
   qa = new QAPanel({
     list: $('ptrList'),
     editable: false,
-    onSelect: (p) => {
-      preview.setContext(p);
+    onSelect: (p, { fromList }) => {
       state.selectedPointerId = p ? p.id : null;
+      layer.setSelected(p ? p.key : null);
+      if (p && fromList) layer.focus(p.key);
       savePrefs({ selected: state.selectedPointerId });
-    }
+      syncContext();
+    },
+    onItemsChange: () => layer.setItems(qa.annotationItems())
   });
 
   $('runBtn').addEventListener('click', run);
@@ -157,6 +186,7 @@ function setMode(mode) {
   const isCode = state.mode === 'code';
   $('codeMode').hidden = !isCode;
   $('qaMode').hidden = isCode;
+  if (layer) layer.setVisible(!isCode);
   for (const [id, on] of [['tabCode', isCode], ['tabQa', !isCode]]) {
     $(id).setAttribute('aria-selected', String(on));
     $(id).tabIndex = on ? 0 : -1;
@@ -293,6 +323,12 @@ async function loadPointers() {
     loadingPointers = false;
     btn.disabled = false;
   }
+}
+
+function syncContext() {
+  if (!qa) return;
+  const sel = qa.items.find((i) => i.id && i.id === state.selectedPointerId);
+  preview.setContext({ screen: currentScreen, selected: sel ? { number: sel.number } : null, count: qa.countOnScreen(currentScreen) });
 }
 
 /* ---------------------------------------------------------------

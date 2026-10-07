@@ -1,12 +1,15 @@
-// QA pointer list.
-//   editable: true  → client view: add / edit / delete, autosaved to the API
-//   editable: false → developer view: read-only review of the same pointers
-// Pointer numbers come from the server and are never renumbered.
+// QA note list (internally "pointers").
+//   editable: true  → client view: edit / delete / change target, autosaved to the API
+//   editable: false → developer view: read-only review of the same notes
+// New notes are created through the preview annotation flow and inserted here with addSaved().
+// Numbers come from the server and are never renumbered.
 // All user text is rendered with textContent / input values, never innerHTML.
 import { pad2 } from './utils.js';
 
 const AUTOSAVE_MS = 700;
-const LIMITS = { screenName: 150, notes: 5000 };
+const LIMITS = { screenName: 150, targetLabel: 150, notes: 5000 };
+const FIELDS = ['screenName', 'screenState', 'targetType', 'targetSelector', 'targetLabel', 'anchorX', 'anchorY', 'viewportWidth', 'viewportHeight', 'notes'];
+const TYPE_LABEL = { element: 'Element', area: 'Area', screen: 'Screen' };
 const TRASH = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 4h11M6 4V2.5h4V4M4 4l.7 9.5h6.6L12 4M6.6 6.5v4.5M9.4 6.5v4.5"/></svg>';
 
 function el(tag, cls, text) {
@@ -16,14 +19,26 @@ function el(tag, cls, text) {
   return n;
 }
 
+function pick(src) {
+  const o = {};
+  for (const k of FIELDS) o[k] = src[k] === undefined ? null : src[k];
+  if (!o.screenState) o.screenState = 'Default';
+  if (!o.targetType) o.targetType = 'screen';
+  if (o.notes == null) o.notes = '';
+  if (o.screenName == null) o.screenName = '';
+  return o;
+}
+
 export class QAPanel {
   /**
    * @param {object} o
-   * @param {HTMLElement} o.list        container for cards
+   * @param {HTMLElement} o.list
    * @param {boolean}     o.editable
-   * @param {object}      [o.api]       { createPointer, updatePointer, deletePointer } (editable only)
-   * @param {Function}    [o.onSelect]  (pointer|null) => void   pointer: { id, number, screenName }
-   * @param {Function}    [o.onChange]  (summary) => void
+   * @param {object}      [o.api]            { updatePointer, deletePointer }
+   * @param {Function}    [o.onSelect]       (note|null, { fromList }) => void
+   * @param {Function}    [o.onChange]       (summary) => void
+   * @param {Function}    [o.onItemsChange]  () => void   (markers need refreshing)
+   * @param {Function}    [o.onChangeTarget] (key) => void
    * @param {Function}    [o.toast]
    */
   constructor(o) {
@@ -33,13 +48,13 @@ export class QAPanel {
     this.nextNumber = 1;
     this.seq = 0;
     this.loaded = false;
+    this.statuses = new Map();
+    this.currentScreen = null;
   }
 
   /* ---------- Public API ---------- */
 
-  setLoading() {
-    this.o.list.replaceChildren(this._message('Loading QA notes…', ''));
-  }
+  setLoading() { this.o.list.replaceChildren(this._message('Loading QA notes…', '')); }
 
   setError(message, retry) {
     const box = this._message('QA notes could not be loaded.', message || 'Check your connection and try again.');
@@ -52,79 +67,110 @@ export class QAPanel {
     this.o.list.replaceChildren(box);
   }
 
-  /**
-   * Replace the list with server data. Local edits that have not been
-   * saved yet (drafts, pending or failed saves) are kept, so a refresh
-   * never silently discards feedback.
-   */
+  /** Replace with server data, keeping any local unsaved edits. */
   setPointers(pointers, nextPointerNumber, preferredSelectedId) {
-    const local = new Map(this.items.filter((i) => i.id).map((i) => [i.id, i]));
+    const local = new Map(this.items.map((i) => [i.id, i]));
     const next = [];
     for (const p of pointers) {
       const existing = local.get(p.id);
-      if (existing && this._hasLocalChanges(existing)) {
-        next.push(existing);
-      } else {
+      if (existing && this._hasLocalChanges(existing)) next.push(existing);
+      else {
         const item = existing || this._newItem();
-        item.id = p.id;
-        item.number = p.pointerNumber;
-        item.screenName = p.screenName;
-        item.notes = p.notes;
-        item.saved = { screenName: p.screenName, notes: p.notes };
+        this._applyServer(item, p);
         item.status = 'idle';
         next.push(item);
       }
       local.delete(p.id);
     }
-    // Pointers deleted elsewhere: keep only if this browser still has unsaved edits for them.
     for (const item of local.values()) if (this._hasLocalChanges(item)) next.push(item);
-    for (const item of this.items) if (!item.id) next.push(item); // local drafts
     next.sort((a, b) => a.number - b.number);
     this.items = next;
-
-    const maxLocal = this.items.reduce((m, i) => Math.max(m, i.number), 0);
-    this.nextNumber = Math.max(nextPointerNumber || 1, maxLocal + 1);
+    this.nextNumber = Math.max(nextPointerNumber || 1, this.items.reduce((m, i) => Math.max(m, i.number + 1), 1));
     this.loaded = true;
 
-    const keepKey = this.selectedKey && this.items.some((i) => i.key === this.selectedKey) ? this.selectedKey : null;
+    const keep = this.selectedKey && this.items.some((i) => i.key === this.selectedKey) ? this.selectedKey : null;
     const wanted = preferredSelectedId && this.items.find((i) => i.id === preferredSelectedId);
-    this.selectedKey = keepKey || (wanted ? wanted.key : null);
+    this.selectedKey = keep || (wanted ? wanted.key : null);
     this._render();
-    this._emitSelect();
+    this._emitSelect(false);
     this._emitChange();
+    this._emitItems();
   }
 
-  /** Add a local draft pointer (editable mode). It is saved once it has a screen name. */
-  add() {
-    if (!this.o.editable) return;
+  /** Insert a note that was just created through the annotation flow. */
+  addSaved(pointer) {
     const item = this._newItem();
-    item.number = this.nextNumber++;
-    item.status = 'draft';
+    this._applyServer(item, pointer);
+    item.status = 'saved';
     this.items.push(item);
+    this.items.sort((a, b) => a.number - b.number);
+    this.nextNumber = Math.max(this.nextNumber, pointer.pointerNumber + 1);
     this.selectedKey = item.key;
     this._render();
-    this._emitSelect();
+    this._fadeSaved(item);
+    this._emitSelect(false);
     this._emitChange();
-    const refs = item.refs;
-    if (refs) {
-      refs.card.scrollIntoView({ block: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
-      refs.name.focus();
-    }
+    this._emitItems();
+    if (item.refs) item.refs.card.scrollIntoView({ block: 'nearest', behavior: reduced() ? 'auto' : 'smooth' });
+    return item.key;
   }
 
-  select(key) {
-    if (this.selectedKey === key) return;
+  /** "Change target": new anchor/selector/label, same note text and number. */
+  retarget(key, target) {
+    const item = this.items.find((i) => i.key === key);
+    if (!item) return;
+    for (const k of ['screenName', 'screenState', 'targetType', 'targetSelector', 'targetLabel', 'anchorX', 'anchorY', 'viewportWidth', 'viewportHeight']) {
+      if (target[k] !== undefined) item.f[k] = target[k];
+    }
+    this.statuses.delete(key);
+    if (item.refs && item.refs.name) {
+      item.refs.name.value = item.f.screenName;
+      item.refs.target.value = item.f.targetLabel || '';
+      item.refs.target.placeholder = placeholderFor(item.f.targetType);
+      item.refs.kind.textContent = TYPE_LABEL[item.f.targetType];
+      this._paintState(item);
+    }
+    this._changed(item);
+    this._emitItems();
+    this._emitSelect(false);
+  }
+
+  select(key, { fromList = false } = {}) {
+    if (this.selectedKey === key) { if (fromList) this._emitSelect(true); return; }
     this.selectedKey = key;
     this._paintSelection();
-    this._emitSelect();
+    this._emitSelect(fromList);
   }
 
   clearSelection() { this.select(null); }
 
-  get count() { return this.items.length; }
+  scrollToCard(key) {
+    const item = this.items.find((i) => i.key === key);
+    if (item && item.refs) item.refs.card.scrollIntoView({ block: 'nearest', behavior: reduced() ? 'auto' : 'smooth' });
+  }
 
-  /** Number the next pointer is expected to get (the server confirms it on save). */
+  /** Statuses from the preview: found | hidden | missing | elsewhere | anchor | none */
+  setTargetStatuses(statuses, screen) {
+    this.statuses = statuses;
+    this.currentScreen = screen;
+    for (const i of this.items) this._paintTargetStatus(i);
+  }
+
+  /** Items for the annotation overlay. */
+  annotationItems() {
+    return this.items.map((i) => ({
+      key: i.key, number: i.number, screenName: i.f.screenName,
+      targetType: i.f.targetType, targetSelector: i.f.targetSelector,
+      anchorX: i.f.anchorX, anchorY: i.f.anchorY
+    }));
+  }
+
+  get count() { return this.items.length; }
   get upcomingNumber() { return this.nextNumber; }
+
+  countOnScreen(screen) {
+    return screen ? this.items.filter((i) => i.f.screenName === screen).length : 0;
+  }
 
   summary() {
     const s = { saving: 0, failed: 0, needsName: 0, pending: 0, total: this.items.length };
@@ -142,23 +188,26 @@ export class QAPanel {
     return s.saving + s.failed + s.needsName + s.pending > 0;
   }
 
-  /** Save everything that is waiting for its debounce. */
   flushAll() {
     return Promise.all(this.items.filter((i) => i.timer || i.status === 'error').map((i) => this._flush(i)));
-  }
-
-  retryFailed() {
-    return Promise.all(this.items.filter((i) => i.status === 'error').map((i) => this._flush(i)));
   }
 
   /* ---------- Internals ---------- */
 
   _newItem() {
     return {
-      key: 'p' + (++this.seq), id: null, number: 0, screenName: '', notes: '',
-      saved: { screenName: '', notes: '' }, status: 'idle', timer: 0, inflight: null, again: false,
+      key: 'p' + (++this.seq), id: null, number: 0,
+      f: pick({}), saved: pick({}),
+      status: 'idle', timer: 0, inflight: null, again: false,
       confirming: false, deleting: false, error: '', refs: null
     };
+  }
+
+  _applyServer(item, p) {
+    item.id = p.id;
+    item.number = p.pointerNumber;
+    item.f = pick(p);
+    item.saved = pick(p);
   }
 
   _hasLocalChanges(i) {
@@ -172,26 +221,27 @@ export class QAPanel {
     return box;
   }
 
-  _emitSelect() {
+  _emitSelect(fromList) {
     if (!this.o.onSelect) return;
     const i = this.items.find((x) => x.key === this.selectedKey);
-    this.o.onSelect(i ? { id: i.id, number: i.number, screenName: i.screenName } : null);
+    this.o.onSelect(i ? { key: i.key, id: i.id, number: i.number, screenName: i.f.screenName } : null, { fromList });
   }
-
   _emitChange() { if (this.o.onChange) this.o.onChange(this.summary()); }
+  _emitItems() { if (this.o.onItemsChange) this.o.onItemsChange(); }
 
   _render() {
     const list = this.o.list;
     list.replaceChildren();
     if (!this.items.length) {
       list.appendChild(this.o.editable
-        ? this._message('No QA notes yet.', 'Add a pointer to leave feedback on the preview.')
+        ? this._message('No QA notes yet.', 'Click “Add note”, then click the part of the preview you want to comment on.')
         : this._message('No QA notes yet.', 'Feedback added through the review link shows up here. Use Refresh to check for new notes.'));
       return;
     }
     for (const item of this.items) list.appendChild(this.o.editable ? this._editableCard(item) : this._readonlyCard(item));
     list.querySelectorAll('.ptr-notes').forEach(autosize);
     this._paintSelection();
+    for (const i of this.items) this._paintTargetStatus(i);
   }
 
   _paintSelection() {
@@ -203,36 +253,71 @@ export class QAPanel {
     }
   }
 
+  _paintTargetStatus(item) {
+    const r = item.refs;
+    if (!r || !r.warn) return;
+    const st = this.statuses.get(item.key);
+    const missing = st === 'missing';
+    r.warn.hidden = !missing;
+    r.warn.textContent = missing ? 'Target may have changed. Showing the saved position instead.' : '';
+  }
+
+  _paintState(item) {
+    const r = item.refs;
+    if (!r || !r.state) return;
+    const s = item.f.screenState;
+    r.state.hidden = !s || s === 'Default';
+    r.state.textContent = s || '';
+  }
+
   _head(item) {
     const head = el('div', 'ptr-head');
     const num = el('span', 'ptr-num', pad2(item.number));
-    head.append(num, el('span', 'ptr-kind', 'Screen'));
-    return { head, num };
+    const kind = el('span', 'ptr-kind', TYPE_LABEL[item.f.targetType] || 'Screen');
+    head.append(num, kind);
+    return { head, num, kind };
+  }
+
+  _labelRow(text, stateEl, action) {
+    const row = el('div', 'ptr-label-row');
+    row.append(el('span', 'ptr-label', text));
+    if (stateEl) row.append(stateEl);
+    if (action) row.append(action);
+    return row;
+  }
+
+  _bindSelect(card, item) {
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('button, input, textarea')) return;
+      this.select(item.key, { fromList: true });
+    });
   }
 
   _readonlyCard(item) {
     const card = el('article', 'ptr is-readonly');
     card.tabIndex = 0;
-    card.setAttribute('aria-label', 'Pointer ' + pad2(item.number) + ': ' + (item.screenName || 'Untitled screen'));
-    const { head, num } = this._head(item);
-    const name = el('p', 'ptr-text-name', item.screenName || 'Untitled screen');
-    if (!item.screenName) name.classList.add('is-muted');
-    const notes = el('p', 'ptr-text-notes', item.notes || 'No notes');
-    if (!item.notes) notes.classList.add('is-muted');
-    card.append(head, el('span', 'ptr-label', 'Screen name'), name, el('span', 'ptr-label', 'Notes'), notes);
-    card.addEventListener('click', () => this.select(item.key));
+    card.setAttribute('aria-label', 'Note ' + pad2(item.number) + ': ' + (item.f.screenName || 'Untitled screen'));
+    const { head, num, kind } = this._head(item);
+    const state = el('span', 'ptr-state');
+    const name = el('p', 'ptr-text-name', item.f.screenName || 'Untitled screen');
+    const target = el('p', 'ptr-text-target', item.f.targetLabel || (item.f.targetType === 'screen' ? 'Entire screen' : 'Selected area'));
+    const notes = el('p', 'ptr-text-notes', item.f.notes || 'No notes');
+    if (!item.f.notes) notes.classList.add('is-muted');
+    const warn = el('p', 'ptr-warn'); warn.hidden = true;
+    card.append(head, this._labelRow('Screen', state), name, this._labelRow('Target'), target, this._labelRow('Notes'), notes, warn);
+    this._bindSelect(card, item);
     card.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.select(this.selectedKey === item.key ? null : item.key); }
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.select(item.key, { fromList: true }); }
     });
-    item.refs = { card, num };
+    item.refs = { card, num, kind, state, warn };
+    this._paintState(item);
     return card;
   }
 
   _editableCard(item) {
     const card = el('article', 'ptr');
-    card.setAttribute('aria-label', 'Pointer ' + pad2(item.number));
-    const { head, num } = this._head(item);
-
+    card.setAttribute('aria-label', 'Note ' + pad2(item.number));
+    const { head, num, kind } = this._head(item);
     const status = el('span', 'ptr-status');
     status.setAttribute('role', 'status');
     const del = el('button', 'ptr-del');
@@ -240,46 +325,60 @@ export class QAPanel {
     del.innerHTML = TRASH; // static icon markup only
     head.append(status, del);
 
-    const nameId = 'ptr-name-' + item.key, notesId = 'ptr-notes-' + item.key;
-    const nameLabel = el('label', 'ptr-label', 'Screen name'); nameLabel.htmlFor = nameId;
+    const nameId = 'ptr-name-' + item.key, targetId = 'ptr-target-' + item.key, notesId = 'ptr-notes-' + item.key;
+    const state = el('span', 'ptr-state');
+    const nameLabelRow = this._labelRow('Screen', state);
+    nameLabelRow.querySelector('.ptr-label').replaceWith(Object.assign(el('label', 'ptr-label', 'Screen'), { htmlFor: nameId }));
     const name = el('input', 'ptr-field ptr-name');
-    Object.assign(name, { id: nameId, type: 'text', autocomplete: 'off', maxLength: LIMITS.screenName, placeholder: 'e.g. Onboarding / Household', value: item.screenName });
+    Object.assign(name, { id: nameId, type: 'text', autocomplete: 'off', maxLength: LIMITS.screenName, placeholder: 'Screen name', value: item.f.screenName });
+
+    const change = el('button', 'qc-link', item.f.targetType === 'screen' && item.f.anchorX == null ? 'Set target' : 'Change target');
+    change.type = 'button';
+    const targetLabelRow = this._labelRow('Target', null, change);
+    targetLabelRow.querySelector('.ptr-label').replaceWith(Object.assign(el('label', 'ptr-label', 'Target'), { htmlFor: targetId }));
+    const target = el('input', 'ptr-field ptr-target');
+    Object.assign(target, { id: targetId, type: 'text', autocomplete: 'off', maxLength: LIMITS.targetLabel, placeholder: placeholderFor(item.f.targetType), value: item.f.targetLabel || '' });
+
     const notesLabel = el('label', 'ptr-label', 'Notes'); notesLabel.htmlFor = notesId;
     const notes = el('textarea', 'ptr-field ptr-notes');
-    Object.assign(notes, { id: notesId, rows: 2, maxLength: LIMITS.notes, placeholder: 'Add feedback for this screen…', value: item.notes });
+    Object.assign(notes, { id: notesId, rows: 2, maxLength: LIMITS.notes, placeholder: 'Add feedback for this screen…', value: item.f.notes });
+    const warn = el('p', 'ptr-warn'); warn.hidden = true;
 
     const confirm = el('div', 'ptr-confirm');
     confirm.hidden = true;
     confirm.setAttribute('role', 'alertdialog');
-    confirm.setAttribute('aria-label', 'Delete pointer ' + pad2(item.number));
+    confirm.setAttribute('aria-label', 'Delete note ' + pad2(item.number));
     const cText = el('p');
-    cText.append(el('strong', null, 'Delete this pointer?'), document.createTextNode(' This feedback will be removed permanently.'));
+    cText.append(el('strong', null, 'Delete this note?'), document.createTextNode(' This feedback will be removed permanently.'));
     const cActions = el('div', 'ptr-confirm-actions');
     const cancel = el('button', 'btn-ghost', 'Cancel'); cancel.type = 'button';
     const really = el('button', 'btn-danger', 'Delete'); really.type = 'button';
     cActions.append(cancel, really);
     confirm.append(cText, cActions);
 
-    name.addEventListener('input', () => { item.screenName = name.value; this._changed(item); this._emitSelect(); });
-    notes.addEventListener('input', () => { autosize(notes); item.notes = notes.value; this._changed(item); });
-    name.addEventListener('blur', () => { if (item.timer) this._flush(item); });
-    notes.addEventListener('blur', () => { if (item.timer) this._flush(item); });
-    card.addEventListener('focusin', () => this.select(item.key));
-    card.addEventListener('mousedown', () => this.select(item.key));
+    name.addEventListener('input', () => { item.f.screenName = name.value; this._changed(item); this._emitItems(); this._emitSelect(false); });
+    target.addEventListener('input', () => { item.f.targetLabel = target.value; this._changed(item); });
+    notes.addEventListener('input', () => { autosize(notes); item.f.notes = notes.value; this._changed(item); });
+    for (const f of [name, target, notes]) {
+      f.addEventListener('blur', () => { if (item.timer) this._flush(item); });
+      f.addEventListener('focus', () => this.select(item.key, { fromList: false }));
+    }
+    this._bindSelect(card, item);
+    change.addEventListener('click', (e) => { e.stopPropagation(); this.select(item.key); if (this.o.onChangeTarget) this.o.onChangeTarget(item.key); });
     status.addEventListener('click', (e) => { if (e.target.closest('.ptr-retry')) this._flush(item); });
 
     del.addEventListener('click', (e) => {
       e.stopPropagation();
       if (item.inflight) return;
-      if (!item.id && !item.screenName.trim() && !item.notes.trim()) { this._removeLocal(item); return; }
       item.confirming = true; this._paint(item); really.focus();
     });
     cancel.addEventListener('click', () => { item.confirming = false; this._paint(item); del.focus(); });
     really.addEventListener('click', () => this._delete(item));
-    confirm.addEventListener('keydown', (e) => { if (e.key === 'Escape') { item.confirming = false; this._paint(item); del.focus(); } });
+    confirm.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopPropagation(); item.confirming = false; this._paint(item); del.focus(); } });
 
-    card.append(head, nameLabel, name, notesLabel, notes, confirm);
-    item.refs = { card, num, status, del, name, notes, confirm, really, cancel };
+    card.append(head, nameLabelRow, name, targetLabelRow, target, notesLabel, notes, warn, confirm);
+    item.refs = { card, num, kind, status, del, name, target, change, notes, state, warn, confirm, really, cancel };
+    this._paintState(item);
     this._paint(item);
     return card;
   }
@@ -293,8 +392,7 @@ export class QAPanel {
   }
 
   _isDirty(item) {
-    if (!item.id) return !!(item.screenName.trim() || item.notes.trim());
-    return item.screenName !== item.saved.screenName || item.notes !== item.saved.notes;
+    return FIELDS.some((k) => item.f[k] !== item.saved[k]);
   }
 
   _flush(item) {
@@ -303,62 +401,65 @@ export class QAPanel {
     if (item.removed) return Promise.resolve();
     if (item.inflight) { item.again = true; return item.inflight; }
     if (!this._isDirty(item)) {
-      item.status = item.id ? 'idle' : 'draft';
+      item.status = 'idle';
       this._paint(item); this._emitChange();
       return Promise.resolve();
     }
-    if (!item.screenName.trim()) {
+    if (!item.f.screenName.trim()) {
       item.status = 'needs-name';
       this._paint(item); this._emitChange();
       return Promise.resolve();
     }
 
-    const sent = { screenName: item.screenName, notes: item.notes };
+    const sent = { ...item.f };
+    const patch = {};
+    for (const k of FIELDS) if (sent[k] !== item.saved[k]) patch[k] = sent[k];
+    // Anchors and target type/selector travel together so the server can validate them.
+    if ('anchorX' in patch || 'anchorY' in patch) { patch.anchorX = sent.anchorX; patch.anchorY = sent.anchorY; }
+    if ('targetSelector' in patch || 'targetType' in patch) { patch.targetType = sent.targetType; patch.targetSelector = sent.targetSelector; }
+
     item.status = 'saving';
     this._paint(item); this._emitChange();
 
     item.inflight = (async () => {
       try {
-        const p = item.id
-          ? await this.o.api.updatePointer(item.id, sent)
-          : await this.o.api.createPointer(sent);
-        item.id = p.id;
+        const p = await this.o.api.updatePointer(item.id, patch);
         item.number = p.pointerNumber;
         item.saved = sent;
-        this.nextNumber = Math.max(this.nextNumber, p.pointerNumber + 1);
         item.status = this._isDirty(item) ? 'pending' : 'saved';
         item.error = '';
       } catch (e) {
         item.status = 'error';
-        item.error = e && e.status === 404 ? 'This pointer was deleted somewhere else.' : (e && e.message) || 'Feedback could not be saved.';
+        item.error = e && e.status === 404 ? 'This note was deleted somewhere else.' : (e && e.message) || 'Feedback could not be saved.';
       } finally {
         item.inflight = null;
         this._paint(item);
         this._emitChange();
-        if (item.key === this.selectedKey) this._emitSelect();
         if (item.again || (item.status === 'pending' && !item.timer)) { item.again = false; this._flush(item); }
-        if (item.status === 'saved') {
-          clearTimeout(item.fade);
-          item.fade = setTimeout(() => { if (item.status === 'saved') { item.status = 'idle'; this._paint(item); } }, 2500);
-        }
+        if (item.status === 'saved') this._fadeSaved(item);
       }
     })();
     return item.inflight;
   }
 
+  _fadeSaved(item) {
+    this._paint(item);
+    clearTimeout(item.fade);
+    item.fade = setTimeout(() => { if (item.status === 'saved') { item.status = 'idle'; this._paint(item); } }, 2500);
+  }
+
   async _delete(item) {
     clearTimeout(item.timer); item.timer = 0;
-    if (!item.id) { this._removeLocal(item); return; }
     item.deleting = true; this._paint(item);
     try {
       await this.o.api.deletePointer(item.id);
       this._removeLocal(item);
-      if (this.o.toast) this.o.toast('Pointer ' + pad2(item.number) + ' deleted');
+      if (this.o.toast) this.o.toast('Note ' + pad2(item.number) + ' deleted');
     } catch (e) {
       item.deleting = false;
-      if (e && e.status === 404) { this._removeLocal(item); return; } // already gone
+      if (e && e.status === 404) { this._removeLocal(item); return; }
       this._paint(item);
-      if (this.o.toast) this.o.toast('Pointer could not be deleted. ' + ((e && e.message) || 'Try again.'));
+      if (this.o.toast) this.o.toast("Couldn't delete this note. " + ((e && e.message) || 'Try again.'));
     }
   }
 
@@ -366,32 +467,29 @@ export class QAPanel {
     item.removed = true;
     clearTimeout(item.timer);
     this.items = this.items.filter((i) => i !== item);
-    if (this.selectedKey === item.key) { this.selectedKey = null; this._emitSelect(); }
+    if (this.selectedKey === item.key) { this.selectedKey = null; this._emitSelect(false); }
     this._render();
     this._emitChange();
+    this._emitItems();
   }
 
   _paint(item) {
     const r = item.refs;
-    if (!r || !r.status) { if (r && r.num) r.num.textContent = pad2(item.number); return; }
+    if (!r) return;
     r.num.textContent = pad2(item.number);
-    r.num.title = item.id ? '' : 'Number is confirmed when this pointer is saved';
-    r.num.classList.toggle('is-draft', !item.id);
-    r.card.setAttribute('aria-label', 'Pointer ' + pad2(item.number));
-    r.del.title = 'Delete pointer ' + pad2(item.number);
-    r.del.setAttribute('aria-label', 'Delete pointer ' + pad2(item.number));
+    if (r.kind) r.kind.textContent = TYPE_LABEL[item.f.targetType] || 'Screen';
+    if (!r.status) return;
+    r.card.setAttribute('aria-label', 'Note ' + pad2(item.number));
+    r.del.title = 'Delete note ' + pad2(item.number);
+    r.del.setAttribute('aria-label', 'Delete note ' + pad2(item.number));
     r.del.disabled = !!item.inflight || item.deleting;
+    if (r.change) r.change.textContent = item.f.targetType === 'screen' && item.f.anchorX == null ? 'Set target' : 'Change target';
 
     const s = r.status;
     s.replaceChildren();
     s.className = 'ptr-status';
-    const label = {
-      pending: 'Unsaved', saving: 'Saving…', saved: 'Saved',
-      'needs-name': 'Add a screen name to save', error: 'Not saved', draft: 'Not saved yet'
-    }[item.status];
-    if (item.status === 'draft' && !item.screenName && !item.notes) {
-      // A fresh empty pointer: nothing to say yet.
-    } else if (label) {
+    const label = { pending: 'Unsaved', saving: 'Saving…', saved: 'Saved', 'needs-name': 'Add a screen name to save', error: 'Not saved' }[item.status];
+    if (label) {
       s.textContent = label;
       s.classList.add('is-' + item.status);
       if (item.status === 'error') {
@@ -399,17 +497,18 @@ export class QAPanel {
         const retry = el('button', 'ptr-retry', 'Retry');
         retry.type = 'button';
         s.append(' ', retry);
-      } else {
-        s.title = '';
-      }
+      } else s.title = '';
     }
-
     r.confirm.hidden = !item.confirming;
     r.really.disabled = r.cancel.disabled = item.deleting;
     r.really.textContent = item.deleting ? 'Deleting…' : 'Delete';
   }
 }
 
+function placeholderFor(type) {
+  return type === 'screen' ? 'Entire screen' : type === 'area' ? 'Selected area' : 'What is this?';
+}
+function reduced() { return matchMedia('(prefers-reduced-motion: reduce)').matches; }
 function autosize(ta) {
   ta.style.height = 'auto';
   ta.style.height = ta.scrollHeight + 2 + 'px';

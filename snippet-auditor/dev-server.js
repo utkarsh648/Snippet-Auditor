@@ -1,4 +1,6 @@
-// Local development server.
+// Local development server (npm run dev). NOT used on Vercel.
+// Do not rename this to server.js, app.js or index.js: Vercel auto-detects
+// those names as a Node server entrypoint and routes every request to it.
 // Serves /public, maps the access-link routes to the two viewpoints,
 // and runs the same /api handlers Vercel runs in production.
 //   npm run dev   →   http://localhost:3000

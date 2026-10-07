@@ -2,9 +2,11 @@
 // Creates a project and prints its two private access links.
 // Only token HASHES are stored; the raw links are shown once, here.
 //
-//   npm run create-project -- --id 30tril --name "30tril" [--html examples/onboarding.html]
-//   npm run create-project -- --id 30tril --rotate dev|qa|both     (issue new links, old ones stop working)
+//   npm run create-project -- --name "Checkout flow"                       (random neutral id, e.g. p-7k2m9xq4)
+//   npm run create-project -- --id checkout --name "Checkout flow" [--html path/to/file.html]
+//   npm run create-project -- --id checkout --rotate dev|qa|both            (issue new links, old ones stop working)
 import { readFile } from 'node:fs/promises';
+import { randomBytes } from 'node:crypto';
 import { loadEnv } from '../lib/env.js';
 import { generateToken, hashToken } from '../lib/tokens.js';
 import { isProjectId, LIMITS } from '../lib/validate.js';
@@ -18,13 +20,14 @@ function arg(name) {
 }
 function fail(msg) { console.error(`\n✖ ${msg}\n`); process.exit(1); }
 
-const id = arg('id');
-const name = arg('name') || id;
-const htmlPath = arg('html');
 const rotate = arg('rotate');
+// No --id: generate a neutral one so the link doesn't reveal the client or project.
+const id = arg('id') || (rotate ? undefined : 'p-' + [...randomBytes(8)].map((b) => 'abcdefghjkmnpqrstuvwxyz23456789'[b % 31]).join(''));
+const name = arg('name') || 'Untitled Project';
+const htmlPath = arg('html');
 const base = (process.env.APP_BASE_URL || 'http://localhost:3000').replace(/\/+$/, '');
 
-if (!isProjectId(id)) fail('Pass --id with lowercase letters, numbers and dashes (e.g. --id 30tril).');
+if (!isProjectId(id)) fail(rotate ? 'Pass the --id of the project whose links you want to replace.' : 'The --id can only use lowercase letters, numbers and dashes (e.g. --id checkout-flow).');
 
 const store = getStore();
 const links = {};
@@ -48,7 +51,7 @@ if (rotate) {
   try {
     await store.createProject({ id, name: name.trim(), html, devTokenHash: hashToken(links.dev), qaTokenHash: hashToken(links.qa) });
   } catch (e) { fail(e.message); }
-  console.log(`\n✔ Created project "${id}".`);
+  console.log(`\n✔ Created project "${name.trim()}" (id: ${id}).`);
 }
 
 console.log('\nStore these links in your password manager. They are not saved anywhere and cannot be shown again.\n');

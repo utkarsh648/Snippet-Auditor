@@ -1,5 +1,7 @@
 // GET  /api/pointers?projectId=…  → { pointers, nextPointerNumber } (developer + client)
-// POST /api/pointers?projectId=…  { screenName, notes } → client only. The server assigns the number.
+// POST /api/pointers?projectId=…  { screenName, notes, screenState?, targetType?, targetSelector?, targetLabel?,
+//                                   anchorX?, anchorY?, viewportWidth?, viewportHeight? } → client only.
+// The server assigns the number. Older clients that send only screenName + notes create screen-level notes.
 import { handler, send, readBody, errors } from '../../lib/http.js';
 import { requireAuth, ROLES } from '../../lib/auth.js';
 import { getStore } from '../../lib/store/index.js';
@@ -16,7 +18,8 @@ export default handler(async (req, res) => {
     const { project } = await requireAuth(req, body, [ROLES.CLIENT]);
     const pointer = await getStore().createPointer(project.id, {
       screenName: v.screenName(body.screenName),
-      notes: v.notes(body.notes)
+      notes: v.notes(body.notes),
+      ...v.annotation(body, { partial: false })
     });
     return send(res, 201, { pointer });
   }

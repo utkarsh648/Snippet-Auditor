@@ -1,4 +1,4 @@
-// PATCH  /api/pointers/:id?projectId=…  { screenName?, notes? } → client only
+// PATCH  /api/pointers/:id?projectId=…  any subset of the POST fields → client only
 // DELETE /api/pointers/:id?projectId=…                          → client only
 // The pointer must belong to the project the token unlocks.
 import { handler, send, readBody, errors, queryParam } from '../../lib/http.js';
@@ -18,7 +18,8 @@ export default handler(async (req, res) => {
     const patch = {};
     if (body.screenName !== undefined) patch.screenName = v.screenName(body.screenName);
     if (body.notes !== undefined) patch.notes = v.notes(body.notes);
-    if (!Object.keys(patch).length) throw errors.badRequest('Nothing to update. Send screenName and/or notes.');
+    Object.assign(patch, v.annotation(body, { partial: true }));
+    if (!Object.keys(patch).length) throw errors.badRequest('Nothing to update.');
     const pointer = await getStore().updatePointer(project.id, id, patch);
     if (!pointer) throw errors.notFound('Pointer not found.');
     return send(res, 200, { pointer });

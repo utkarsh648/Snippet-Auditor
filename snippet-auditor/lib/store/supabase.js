@@ -1,11 +1,24 @@
 import { createClient } from '@supabase/supabase-js';
 
 const PROJECT_COLS = 'id, name, html, created_at, updated_at';
-const POINTER_COLS = 'id, pointer_number, screen_name, notes, created_at, updated_at';
+const POINTER_COLS = 'id, pointer_number, screen_name, notes, screen_state, target_type, target_selector, target_label, anchor_x, anchor_y, viewport_width, viewport_height, created_at, updated_at';
+const POINTER_FIELDS = {
+  screenName: 'screen_name', notes: 'notes', screenState: 'screen_state', targetType: 'target_type',
+  targetSelector: 'target_selector', targetLabel: 'target_label', anchorX: 'anchor_x', anchorY: 'anchor_y',
+  viewportWidth: 'viewport_width', viewportHeight: 'viewport_height'
+};
 
 const toProject = (r) => r && ({ id: r.id, name: r.name, html: r.html, createdAt: r.created_at, updatedAt: r.updated_at });
 const toPointer = (r) => r && ({
   id: r.id, pointerNumber: r.pointer_number, screenName: r.screen_name, notes: r.notes,
+  screenState: r.screen_state || 'Default',
+  targetType: r.target_type || 'screen',
+  targetSelector: r.target_selector ?? null,
+  targetLabel: r.target_label ?? null,
+  anchorX: r.anchor_x ?? null,
+  anchorY: r.anchor_y ?? null,
+  viewportWidth: r.viewport_width ?? null,
+  viewportHeight: r.viewport_height ?? null,
   createdAt: r.created_at, updatedAt: r.updated_at
 });
 
@@ -75,10 +88,20 @@ export function createSupabaseStore({ url, secretKey }) {
       return { pointers: (data || []).map(toPointer), nextPointerNumber: proj ? proj.next_pointer_number : 1 };
     },
 
-    async createPointer(projectId, { screenName, notes }) {
+    async createPointer(projectId, f) {
       // The database function assigns the number atomically and never reuses one.
       const { data, error } = await db.rpc('create_qa_pointer', {
-        p_project_id: projectId, p_screen_name: screenName, p_notes: notes
+        p_project_id: projectId,
+        p_screen_name: f.screenName,
+        p_notes: f.notes,
+        p_screen_state: f.screenState,
+        p_target_type: f.targetType,
+        p_target_selector: f.targetSelector,
+        p_target_label: f.targetLabel,
+        p_anchor_x: f.anchorX,
+        p_anchor_y: f.anchorY,
+        p_viewport_width: f.viewportWidth,
+        p_viewport_height: f.viewportHeight
       });
       check(error, 'pointer create');
       const row = Array.isArray(data) ? data[0] : data;
@@ -87,8 +110,9 @@ export function createSupabaseStore({ url, secretKey }) {
 
     async updatePointer(projectId, pointerId, patch) {
       const row = {};
-      if (patch.screenName !== undefined) row.screen_name = patch.screenName;
-      if (patch.notes !== undefined) row.notes = patch.notes;
+      for (const [key, column] of Object.entries(POINTER_FIELDS)) {
+        if (patch[key] !== undefined) row[column] = patch[key];
+      }
       const { data, error } = await db.from('qa_pointers').update(row)
         .eq('id', pointerId).eq('project_id', projectId).select(POINTER_COLS);
       check(error, 'pointer update');

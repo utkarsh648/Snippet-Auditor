@@ -42,15 +42,15 @@
       <div class="panel-head">
         <div class="ph-row">
           <h2 class="ph-title"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><rect x="2.5" y="3" width="15" height="11.5" rx="1"/><path d="M6 17.5l2.5-3M6.5 10.5l1.2-3.2 4.8-.8-1 1.4M6.5 10.5l3.4-.6"/></svg>QA Notes</h2>
-          <span class="count-chip" id="ptrCount" title="Pointers">0</span>
+          <span class="count-chip" id="ptrCount" title="Notes">0</span>
         </div>
-        <p class="ph-sub">Add screen names and notes while reviewing the prototype. Notes save automatically.</p>
+        <p class="ph-sub">Click “Add note”, then click the exact part of the preview you want to comment on. Edits save automatically.</p>
       </div>
       <div class="ptr-list" id="ptrList" aria-label="QA pointers"></div>
       <div class="qa-foot">
         <button type="button" class="add-ptr" id="addPtrBtn" disabled>
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg>
-          Add pointer <span class="next" id="nextPtrNum">01</span>
+          <span id="addPtrLabel">Add note</span> <span class="next" id="nextPtrNum">01</span>
         </button>
       </div>
     </section>
@@ -58,12 +58,8 @@
     <section class="panel preview-panel" aria-label="Preview">
       <div class="pv-head">
         <h2>Preview</h2>
-        <span class="pill is-plain" id="ctxPill" role="status">
-          <i class="dot"></i><span class="pill-text" id="ctxText">Preview</span>
-          <button class="pill-clear" id="ctxClear" type="button" title="Clear the selected pointer" aria-label="Clear the selected pointer" hidden>
-            <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 3l6 6M9 3l-6 6"/></svg>
-          </button>
-        </span>
+        <span class="pill is-plain" id="ctxPill" role="status"><i class="dot"></i><span class="pill-text" id="ctxText">Preview</span></span>
+        <span class="ctx-meta" id="ctxMeta" hidden><span id="ctxMetaText"></span><button class="pill-clear" id="ctxClear" type="button" title="Clear the selected note" aria-label="Clear the selected note" hidden><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 3l6 6M9 3l-6 6"/></svg></button></span>
         <span class="pv-status" id="pvStatus" data-state="ready" role="status"><i></i><span id="pvStatusText">Ready</span></span>
         <div class="pv-tools">
           <span class="vsep" aria-hidden="true"></span>

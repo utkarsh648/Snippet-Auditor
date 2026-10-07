@@ -101,22 +101,24 @@
 </head>
 
 <body>
-  <nav class="stepper" aria-label="Onboarding steps">
-    <button class="step is-active" data-go="1"><span class="n">1</span><span class="label">Household</span></button>
+  <!-- QA hints for Snippet Auditor: data-qa-screen names each screen, data-qa-state names a
+       temporary state (like an open dialog), data-qa-id gives elements stable names. Optional. -->
+  <nav class="stepper" aria-label="Onboarding steps" data-qa-id="stepper" data-qa-label="Onboarding stepper">
+    <button class="step is-active" data-go="1" data-qa-id="step-household"><span class="n">1</span><span class="label">Household</span></button>
     <span class="sep">/</span>
-    <button class="step" data-go="2" disabled><span class="n">2</span><span class="label">Connections</span></button>
+    <button class="step" data-go="2" disabled data-qa-id="step-connections"><span class="n">2</span><span class="label">Connections</span></button>
     <span class="sep">/</span>
-    <button class="step" data-go="3" disabled><span class="n">3</span><span class="label">Preferences</span></button>
+    <button class="step" data-go="3" disabled data-qa-id="step-preferences"><span class="n">3</span><span class="label">Preferences</span></button>
     <span class="secure mono">256-bit Encrypted</span>
   </nav>
 
   <main>
     <!-- Step 1: Household -->
-    <section data-step="1">
+    <section data-step="1" data-qa-screen="Household">
       <h1>Who belongs to this household?</h1>
       <p class="lead">Select all members to include in your financial sync and coverage plan.</p>
 
-      <div id="members">
+      <div id="members" data-qa-id="household-members" data-qa-label="Household member list">
         <label class="member">
           <input type="checkbox" checked>
           <span class="who"><strong>Alex Chen (You)</strong><small>alex.chen@example.com</small></span>
@@ -133,7 +135,7 @@
           <span class="tag">Dependent</span>
         </label>
       </div>
-      <button class="dashed" data-action="add-member">+ Add household member</button>
+      <button class="dashed" data-action="add-member" data-qa-id="add-member">+ Add household member</button>
 
       <div class="settings">
         <div class="row">
@@ -141,7 +143,7 @@
             <h3>Household Tax Filing Status</h3>
             <p>Affects aggregated deduction ceilings</p>
           </div>
-          <select aria-label="Household tax filing status">
+          <select aria-label="Household tax filing status" data-qa-id="tax-filing-status">
             <option>Married Filing Jointly</option>
             <option>Married Filing Separately</option>
             <option>Head of Household</option>
@@ -153,35 +155,35 @@
             <h3>Shared Accounts Sync</h3>
             <p>Allow automatic asset categorization across all adults</p>
           </div>
-          <input class="switch" type="checkbox" role="switch" aria-label="Shared accounts sync" checked>
+          <input class="switch" type="checkbox" role="switch" aria-label="Shared accounts sync" data-qa-id="shared-accounts-sync" checked>
         </div>
       </div>
 
       <div class="actions">
-        <button class="ghost" data-action="draft">Save Draft</button>
+        <button class="ghost" data-action="draft" data-qa-id="save-draft">Save Draft</button>
         <span class="spacer"></span>
         <span class="hint" id="memberCount">3 selected</span>
         <button class="secondary" disabled>Back</button>
-        <button class="primary" id="toConnections" data-go="2">Continue to Connections →</button>
+        <button class="primary" id="toConnections" data-go="2" data-qa-id="continue-to-connections">Continue to Connections →</button>
       </div>
     </section>
 
     <!-- Step 2: Connections -->
-    <section data-step="2" hidden>
+    <section data-step="2" data-qa-screen="Connections" hidden>
       <h1>Connect your grocery stores</h1>
       <p class="lead">Link the stores your household shops at so purchases sync automatically.</p>
 
-      <div class="store">
+      <div class="store" data-qa-id="store-greenleaf">
         <span class="logo">G</span>
         <span class="who"><strong>Greenleaf Market</strong><small>Loyalty account · 2 cards</small></span>
         <button class="connect" data-action="connect" data-store="Greenleaf Market">Connect</button>
       </div>
-      <div class="store">
+      <div class="store" data-qa-id="store-harbor">
         <span class="logo">H</span>
         <span class="who"><strong>Harbor Grocers</strong><small>Online orders and receipts</small></span>
         <button class="connect" data-action="connect" data-store="Harbor Grocers">Connect</button>
       </div>
-      <div class="store">
+      <div class="store" data-qa-id="store-northside">
         <span class="logo">N</span>
         <span class="who"><strong>Northside Pantry</strong><small>In-store receipts only</small></span>
         <button class="connect" data-action="connect" data-store="Northside Pantry">Connect</button>
@@ -191,26 +193,26 @@
         <span class="hint" id="connCount">0 connected</span>
         <span class="spacer"></span>
         <button class="secondary" data-go="1">Back</button>
-        <button class="primary" id="toPrefs" data-go="3" disabled>Continue to Preferences →</button>
+        <button class="primary" id="toPrefs" data-go="3" disabled data-qa-id="continue-to-preferences">Continue to Preferences →</button>
       </div>
     </section>
 
     <!-- Step 3: Preferences -->
-    <section data-step="3" hidden>
+    <section data-step="3" data-qa-screen="Preferences" hidden>
       <h1>Set your food preferences</h1>
       <p class="lead">We use these to tailor recommendations for everyone in the household.</p>
 
       <p class="group-label">Dietary preferences</p>
-      <div class="chips">
-        <button class="chip" aria-pressed="true">Vegetarian</button>
-        <button class="chip" aria-pressed="false">Gluten-free</button>
-        <button class="chip" aria-pressed="false">Dairy-free</button>
-        <button class="chip" aria-pressed="true">Organic first</button>
-        <button class="chip" aria-pressed="false">Low sodium</button>
+      <div class="chips" data-qa-id="dietary-preferences" data-qa-label="Dietary preference chips">
+        <button class="chip" aria-pressed="true" data-qa-id="pref-vegetarian">Vegetarian</button>
+        <button class="chip" aria-pressed="false" data-qa-id="pref-gluten-free">Gluten-free</button>
+        <button class="chip" aria-pressed="false" data-qa-id="pref-dairy-free">Dairy-free</button>
+        <button class="chip" aria-pressed="true" data-qa-id="pref-organic-first">Organic first</button>
+        <button class="chip" aria-pressed="false" data-qa-id="pref-low-sodium">Low sodium</button>
       </div>
 
       <p class="group-label">Weekly grocery budget</p>
-      <div class="budget" role="radiogroup" aria-label="Weekly grocery budget">
+      <div class="budget" role="radiogroup" aria-label="Weekly grocery budget" data-qa-id="weekly-budget">
         <label><input type="radio" name="budget" value="Under $150">Under $150</label>
         <label><input type="radio" name="budget" value="$150–$300" checked>$150–$300</label>
         <label><input type="radio" name="budget" value="$300+">$300+</label>
@@ -219,12 +221,12 @@
       <div class="actions">
         <span class="spacer"></span>
         <button class="secondary" data-go="2">Back</button>
-        <button class="primary" data-go="done">Finish setup</button>
+        <button class="primary" data-go="done" data-qa-id="finish-setup">Finish setup</button>
       </div>
     </section>
 
     <!-- Done -->
-    <section data-step="done" class="done" hidden>
+    <section data-step="done" class="done" data-qa-screen="Setup complete" hidden>
       <div class="check">✓</div>
       <h1>You're all set</h1>
       <p class="lead" id="summary"></p>
@@ -232,7 +234,7 @@
     </section>
   </main>
 
-  <div class="modal" id="memberModal" hidden>
+  <div class="modal" id="memberModal" data-qa-state="Add member dialog" hidden>
     <form class="dialog" id="memberForm" role="dialog" aria-modal="true" aria-labelledby="memberTitle">
       <h2 id="memberTitle">Add household member</h2>
       <label class="field"><span>Full name</span><input id="memberName" autocomplete="off" required></label>
